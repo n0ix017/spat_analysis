@@ -18,3 +18,6 @@ norm_ja <- function(x){
     str_to_lower()
 }
 
+#停車駅属性を読み込み
+source("code/ref_stops_shinkansen.R", encoding = "UTF-8")
+
