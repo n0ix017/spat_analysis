@@ -8,6 +8,3 @@ STATION_GJ <- here::here("data_raw", "ksj_n02_railway","N02-24_Station.geojson")
 #出力先
 OUT_DIR_GJ  <- here::here("data_fmt", "fmt_gj")
 OUT_DIR_RDS <- here::here("data_fmt", "fmt_rds")
-
-#出力ファイル名
-
