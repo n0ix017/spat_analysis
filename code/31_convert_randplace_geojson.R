@@ -1,4 +1,4 @@
-#convert_randplace_geojson.R
+#31_convert_randplace_geojson.R
 #2017年以前のものがgeojson形式で配布されていなかったためshapefileを変換して形式を揃える
 #2013・2014年, 2015年の一部は他とディレクトリ構成が違うぽい
 

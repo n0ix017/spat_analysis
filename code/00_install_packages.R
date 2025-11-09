@@ -1,3 +1,5 @@
+#00_install_packages.R
+
 install.packages("cartogram")
 install.packages("estimatr")
 install.packages("fixest")

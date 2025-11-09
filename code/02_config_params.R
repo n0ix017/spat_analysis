@@ -1,4 +1,4 @@
-#config_params.R
+#02_config_params.R
 
 EPSG_WGS84 <- 4326
 

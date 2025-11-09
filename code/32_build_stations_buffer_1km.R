@@ -1,10 +1,10 @@
-#build_station_buffer_1.R
+#32_build_station_buffer_1km.R
 
 library(sf)
 library(here)
 
-source(here("code","config_paths.R"))
-source(here("code","config_params.R"))
+source(here("code","01_config_paths.R"))
+source(here("code","02_config_params.R"))
 
 #駅データ（フラグ付き）読み込み
 stn_flag <- readRDS(STATIONS_OUT_RDS)
