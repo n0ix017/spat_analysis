@@ -16,8 +16,9 @@ stn_buf <- stn_flag |>
   st_buffer(buf_m) |>
   st_transform(EPSG_WGS84)
 
-STATIONS_BUF_GJ <- here::here("fmt_gj","tokaido_stations_buffer_1km.geojson")
-STATIONS_BUF_RDS <- here::here("fmt_rds", "tokaido_stations_buffer_1km.rds")
+STATIONS_BUF_GJ <- here::here("data_fmt", "fmt_gj","tokaido_stations_buffer_1km.geojson")
+STATIONS_BUF_RDS <- here::here("data_fmt", "fmt_rds", "tokaido_stations_buffer_1km.rds")
 dir.create(dirname(STATIONS_BUF_GJ), recursive = TRUE, showWarnings = FALSE)
+dir.create(dirname(STATIONS_BUF_RDS), recursive = TRUE, showWarnings = FALSE)
 st_write(stn_buf, STATIONS_BUF_GJ, delete_dsn=TRUE, quiet=TRUE)
 saveRDS(stn_buf, STATIONS_BUF_RDS)
