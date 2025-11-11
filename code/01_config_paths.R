@@ -10,3 +10,9 @@ STATION_GJ <- here::here("data_raw", "ksj_n02_railway","N02-24_Station.geojson")
 #出力先
 OUT_DIR_GJ  <- here::here("data_fmt", "fmt_gj")
 OUT_DIR_RDS <- here::here("data_fmt", "fmt_rds")
+
+# --- 入出力の規約 ---
+L02_STD_DIR   <- here::here("data_fmt", "l02_std")  # 年ごとにgeojsonを格納している親
+PANEL_DIR     <- here::here("data_fmt", "panel")    # 集計済みパネルの格納先
+MATCH_DIR     <- here::here("data_fmt", "matched")  # マッチング結果の格納先
+FIG_DIR       <- here::here("output", "fig")        # 図の出力先
