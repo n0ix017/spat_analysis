@@ -1,153 +1,175 @@
-# script/21_01_build_full_panel.R
-# 目的:
-#   年度ごとの L02 地価データを「駅 × 距離帯(band)」に空間結合し、
-#   駅×距離帯×年の集計パネルを作る。
+# code/fn_read_l02_year.R
+# 役割: 指定年の L01/L02 地価データを `sf` で読み込んで返す。
+# 仕様（このプロジェクト前提のシンプル版）:
+#   1) data_raw/ksj_l02_landprice/<year>/ 直下の GeoJSON（*.geojson）だけを読む
+#   2) 列名の最小正規化（price_yen_m2 / year）のみ行い、それ以外は変更しない
+#   3) CRS 未設定なら JGD2000(EPSG:4612) を仮設定（後段で bands に合わせて変換）
+#   4) SHP/GML 等へのフォールバックは行わない（GeoJSON が無ければ明示的にエラー）
 
-build_station_band_panel <- function(
-  years,
-  bands,
-  write_rds = NULL,
-  write_csv = NULL,
-  price_var = c("log_price", "price_yen_m2"),
-  agg = c("mean", "median"),
-  min_pts = 3L
-) {
-  # ---- 必要パッケージ -------------------------------------------------------
-  suppressPackageStartupMessages({
-    library(dplyr)
-    library(purrr)
-    library(sf)
-  })
+read_l02_year <- function(year,
+                           base_dir = here::here("data_raw", "ksj_l02_landprice")) {
+  # --- 目的 ---------------------------------------------------------------
+  # ・このプロジェクトでは 2009–2017 も含め、すでに GeoJSON を事前生成済み
+  # ・そのため、信頼性を担保するため「年フォルダ直下の .geojson のみ」を読む
+  # ・SHP/GML 等へのフォールバックは行わない（想定外入力は明確にエラー）
 
-# ---- 使う集計器を“関数”で定義（文字列NG） ----
-agg_funs <- list(
-  median = function(x) stats::median(x, na.rm = TRUE),
-  mean   = function(x) base::mean(x, na.rm = TRUE),
-  p25    = function(x) stats::quantile(x, 0.25, na.rm = TRUE, names = FALSE),
-  p75    = function(x) stats::quantile(x, 0.75, na.rm = TRUE, names = FALSE),
-  n      = function(x) sum(!is.na(x))
-)
-# 呼び出し側が指定する agg（例: c("median","mean")）がキーに含まれているか検証
-if (!all(agg %in% names(agg_funs))) {
-  stop("未知の集計器が指定されています: ", paste(setdiff(agg, names(agg_funs)), collapse = ", "))
-}
+  # --- 前提チェック -------------------------------------------------------
+  stopifnot(length(year) == 1L, is.numeric(year))
+  year_dir <- file.path(base_dir, as.character(year))
 
-  # ---- 年ごと処理（pref_code のフィルタはしない：あなたの bands 側で空間的に絞れる想定） ---
-  panel_list <- purrr::map(years, function(y) {
-    # L02 読み込み：あなたの環境には read_l02_year(y) があり、sf を返す前提
-    l02 <- read_l02_year(y) %>% ensure_year(y)
+  # --- GeoJSON 列挙（年フォルダ直下のみ / 大文字・小文字は無視） ----------
+  files_geojson <- if (dir.exists(year_dir)) {
+    list.files(
+      year_dir,
+      pattern    = "\\.geojson$",
+      recursive  = FALSE,
+      full.names = TRUE,
+      ignore.case = TRUE
+    )
+  } else {
+    character(0)
+  }
 
-    # ---- CRS を bands に合わせて統一（st_join 前に必ず実施） ----
-    bands_crs <- sf::st_crs(bands)
-    if (!is.na(bands_crs)) {
-      l02_crs <- sf::st_crs(l02)
-      if (is.na(l02_crs)) {
-        message(sprintf("⚠️ [%d] L02 の CRS が未設定のため、bands に合わせて設定します: %s", y, format(bands_crs)))
-        sf::st_crs(l02) <- bands_crs
-      } else if (l02_crs != bands_crs) {
-        l02 <- sf::st_transform(l02, bands_crs)
+  # --- 見つからない場合は丁寧に落とす -----------------------------------
+  if (!length(files_geojson)) {
+    msg <- paste0(
+      "read_l02_year(): GeoJSON が見つかりませんでした。\n",
+      "  - 探索したディレクトリ: ", normalizePath(year_dir, mustWork = FALSE), "\n",
+      "  - 対応策: 先に convert 関数で ", year, " 年の GeoJSON を作成してください。\n",
+      "            例: L02-", sprintf("%02d", as.integer(year) %% 100L), "_13.geojson など"
+    )
+    stop(msg, call. = FALSE)
+  }
+
+  message(sprintf("  - GeoJSON %d件: %s",
+                  length(files_geojson),
+                  paste(basename(files_geojson), collapse = ", ")))
+
+  # --- 読み込み -----------------------------------------------------------
+  suppressPackageStartupMessages({ library(sf) })
+
+  pieces <- lapply(files_geojson, function(fp) {
+    # 静かに読む（quiet=TRUE）
+    x <- tryCatch(sf::st_read(fp, quiet = TRUE), error = function(e) NULL)
+    if (is.null(x)) return(NULL)
+
+    # CRS 無し → JGD2000(EPSG:4612) を仮設定（旧データ対策）
+    if (is.na(sf::st_crs(x))) {
+      sf::st_crs(x) <- 4612
+    }
+    # 読み込み直後に 4326 へ正規化（ファイル間の CRS 差異を吸収）
+    x <- sf::st_transform(x, 4326)
+
+    # ---- 列名の最小正規化 -----------------------------------------------
+    nm <- names(x)
+
+    # 価格（円/㎡）
+    if (!"price_yen_m2" %in% nm) {
+      cand <- intersect(c("price_yen_m2", "L02_006", "L01_006"), nm)
+      if (length(cand)) {
+        x[["price_yen_m2"]] <- suppressWarnings(as.numeric(x[[cand[1]]]))
       }
     }
-    # 形状の不整合がある場合に備えて有効化
-    l02 <- sf::st_make_valid(l02)
 
-    # year 列が無ければ付与（簡潔な保険）
-    if (!("year" %in% names(l02))) {
-      l02 <- dplyr::mutate(l02, year = y)
+    # 年度（無ければ引数 year を付与）
+    if (!"year" %in% nm) {
+      x[["year"]] <- as.integer(year)
     }
 
-    # 空間結合（bands も sf 前提）
-    joined <- sf::st_join(l02, bands, left = FALSE)
+    # ジオメトリ妥当化（壊れたポリゴン等の保険）
+    if (any(sf::st_is_valid(x) == FALSE)) {
+      x <- sf::st_make_valid(x)
+    }
 
-    # 駅×距離帯×年で集計
-    joined %>%
-      dplyr::group_by(station_id, band_id, year) %>%
-      dplyr::summarise(
-        dplyr::across(dplyr::all_of(price_var), agg_funs[agg], .names = "{.col}_{.fn}"),
-        n_obs = dplyr::n(),
-        .groups = "drop_last"
-      ) %>%
-      dplyr::filter(n_obs >= min_pts) %>%   # 観測点が少ないバンドを除外
-      dplyr::ungroup()
+    x
   })
 
-  panel <- dplyr::bind_rows(panel_list)
-
-  # ---- 出力（必要なときだけ） ----------------------------------------------
-  if (!is.null(write_rds)) saveRDS(panel, write_rds)
-  if (!is.null(write_csv)) readr::write_csv(panel, write_csv)
-
-  panel
-}
-
-# ======================================================================
-# 実行ブロック
-# - 最低限の依存だけ読み込み、2009–2025 を一括生成して保存。
-# - pref_code や設定ファイルの自動検出は行わない。
-# ======================================================================
-{
-  suppressPackageStartupMessages({
-    library(here)
-    library(readr)
-  })
-
-  # bands を既存 RDS から読む（無ければ関数で作る）
-  bands_rds <- here::here("data_fmt", "fmt_rds", "station_bands.rds")
-  if (file.exists(bands_rds)) {
-    bands <- readRDS(bands_rds)
-  } else {
-    source(here::here("code", "fn_build_station_bands.R"))
-    bands <- build_station_bands()  # あなたの関数前提のデフォルトで作成
-    dir.create(dirname(bands_rds), recursive = TRUE, showWarnings = FALSE)
-    saveRDS(bands, bands_rds)
-  }
-  # ---- bands 読み込み直後に標準化 ----
-suppressPackageStartupMessages({ library(dplyr); library(rlang) })
-
-# 1) 駅ID列：station_key を station_id に揃える
-if (!"station_id" %in% names(bands)) {
-  if ("station_key" %in% names(bands)) {
-    bands <- bands %>% rename(station_id = station_key)
-  } else {
-    stop("bands に station_id / station_key が見つかりません。")
-  }
-}
-
-# 2) band_id が無い場合は距離帯から合成（※今回は既にあるので保険）
-if (!"band_id" %in% names(bands)) {
-  if (all(c("band_from_km","band_to_km") %in% names(bands))) {
-    bands <- bands %>%
-      mutate(band_id = sprintf("[%g,%g)", band_from_km, band_to_km))
-  } else {
-    stop("bands に band_id も band_from_km/band_to_km もありません。")
-  }
-}
-
-# 3) L02読み込み後に year が無い場合付与する小関数
-ensure_year <- function(x, y) {
-  if (!"year" %in% names(x)) dplyr::mutate(x, year = y) else x
-}
-
-  # L02 を読む関数の読み込み（固定パスのみ）
-  if (!exists("read_l02_year", mode = "function")) {
-    source(here::here("code", "fn_read_l02_year.R"))
+  pieces <- Filter(Negate(is.null), pieces)
+  if (!length(pieces)) {
+    stop(sprintf("read_l02_year(): 読み込みに失敗しました（year=%s）", year), call. = FALSE)
   }
 
-  years  <- 2009:2025
-  outdir <- here::here("output", "tables")
-  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-  out_rds <- file.path(outdir, sprintf("station_band_panel_%d_%d.rds", min(years), max(years)))
-  out_csv <- file.path(outdir, sprintf("station_band_panel_%d_%d.csv", min(years), max(years)))
+  # 行方向に結合して返す
+  suppressWarnings(suppressMessages(do.call(rbind, pieces)))
+}
 
-  message(sprintf("=== フルパネル構築を開始: 年度 %d–%d ===", min(years), max(years)))
-  panel <- build_station_band_panel(
-    years     = years,
-    bands     = bands,
-    write_rds = out_rds,
-    write_csv = out_csv,
-    price_var = c("log_price", "price_yen_m2"),
-    agg       = c("mean", "median"),
-    min_pts   = 3L
+# === フルパネル（駅×距離帯×年）を一括構築する簡潔版 ===
+suppressPackageStartupMessages({ library(here); library(sf); library(dplyr); library(purrr) })
+
+# 依存関数（年別 L01/L02 を読み込む）をロード
+# ※ 既に code/fn_read_l02_year.R に定義済みである前提
+if (!exists("read_l02_year", mode = "function")) {
+  source(here::here("code","fn_read_l02_year.R"))
+}
+
+YEARS <- 2009:2025
+BANDS_PATH <- here::here("data_fmt","fmt_rds","station_bands.rds")
+OUT_PATH   <- here::here("data_fmt","fmt_rds","panel_band_l02.rds")
+
+message("=== フルパネル構築を開始: 年度 ", min(YEARS), "–", max(YEARS), " ===")
+
+# 駅×距離帯ポリゴンの読み込み（CRS 未設定なら 4326 に仮置き）
+bands <- readRDS(BANDS_PATH)
+if (is.na(sf::st_crs(bands))) sf::st_crs(bands) <- 4326
+
+# 年単位の集計関数（最小限・可読性重視）
+build_one <- function(year){
+  message(">> 年 ", year, " のパネルを作成中 …")
+
+  # L01/L02 を読み込み（年フォルダ直下の GeoJSON のみ）
+  l02 <- read_l02_year(year)
+
+  # 価格の前処理（log 取り）
+  l02 <- l02 |>
+    dplyr::mutate(
+      price_yen_m2 = suppressWarnings(as.numeric(.data[["price_yen_m2"]])),
+      log_price    = log(price_yen_m2)
+    ) |>
+    dplyr::filter(is.finite(log_price))
+
+  # --- CRS を合わせる（結合前に 4326 に統一） --------------------------
+  # L02: NA のときは 4612 を仮置きしてから 4326 へ
+  if (is.na(sf::st_crs(l02))) sf::st_crs(l02) <- 4612
+  l02 <- sf::st_transform(l02, 4326)
+
+  # bands: NA のときは 4326 を明示／異なるなら 4326 へ
+  b <- bands
+  if (is.na(sf::st_crs(b))) {
+    sf::st_crs(b) <- 4326
+  } else if (sf::st_crs(b) != sf::st_crs(l02)) {
+    b <- sf::st_transform(b, 4326)
+  }
+
+  # 空間結合：地価点/面 → 距離帯（左外部でなく inner 的に）
+  joined <- sf::st_join(
+    l02[, c("year","price_yen_m2","log_price")],
+    b,
+    left = FALSE
   )
-  message(sprintf("✅ 完了: %s / %s", out_rds, out_csv))
+
+  # 幾何を落として距離帯×駅×年で集計
+  out <- joined |>
+    sf::st_drop_geometry() |>
+    dplyr::group_by(
+      year, station_key, station_jp,
+      band_id, band_from_km, band_to_km,
+      nozomi, hikari, kodama, service_tier
+    ) |>
+    dplyr::summarise(
+      n_obs        = dplyr::n(),
+      mean_price   = mean(price_yen_m2, na.rm = TRUE),
+      median_price = stats::median(price_yen_m2, na.rm = TRUE),
+      mean_log     = mean(log_price, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::arrange(station_key, band_from_km)
+
+  invisible(out)
 }
+
+# すべての年をまとめて DataFrame に
+panel <- purrr::map_dfr(YEARS, build_one)
+
+# 保存
+saveRDS(panel, OUT_PATH)
+message("✅ 完了: ", OUT_PATH)

@@ -10,6 +10,27 @@ library(here)
 # 優先順位は input_priority で指定（既定：c("geojson","shp","gml")）
 # ・pref_code に合致するファイル名を厳密に優先
 # 戻り値：list(path = <ファイルパス>, type = "geojson"|"shp"|"gml")
+# 年(yyyy)と都道府県コード(pp: "13" など)で L02-yy_pp.shp を厳密探索
+find_l02_shp <- function(year, pref_code, base_dir){
+  yy <- sprintf("%02d", as.integer(year) %% 100)
+  pp <- sprintf("%02d", as.integer(pref_code))
+
+  root <- file.path(base_dir, "shapefile", paste0("l02_", yy))
+  # 例: .../shapefile/l02_14/**/SHAPE/L02-14_14.shp を厳密一致で拾う
+  cand <- list.files(
+    root, recursive = TRUE, full.names = TRUE,
+    pattern = paste0("^L02-", yy, "_", pp, "\\.shp$")
+  )
+  # よくある配下の正式パス …/SHAPE/… を優先
+  cand <- cand[grepl("/SHAPE/", cand)]
+
+  if (length(cand) == 0) stop("SHP not found: year=", year, " pref=", pp)
+  if (length(cand) > 1) {
+    # まれに重複ヒットした場合はいちばん階層が深いものを採用
+    cand <- cand[which.max(nchar(cand))]
+  }
+  return(cand[[1]])
+}
 .l02_detect_input <- function(year_dir, pref_code = NULL,
                               input_priority = c("geojson","shp","gml"),
                               verbose = TRUE,
@@ -33,13 +54,13 @@ library(here)
     pc1  <- as.character(as.integer(pref_code))             # "1".."47"
     base <- fs::path_file(paths)
 
-    # 厳密: 2桁コードの前後が数字以外（例: "_13", "-13", ".13", 末尾"13"）
-    pat_strict <- stringr::regex(paste0("(^|[^0-9])", pc2, "([^0-9]|$)"))
+    # 厳密: 2桁コードの直前がアンダースコア（例: "_13"）
+    pat_strict <- stringr::regex(paste0("_", pc2, "([^0-9]|$)"))
     hit <- paths[stringr::str_detect(base, pat_strict)]
     if (length(hit) > 0L) return(hit[[1]])
 
-    # フォールバック: 非ゼロ埋め（例: "_1", "-1", 末尾"1"）
-    pat_loose <- stringr::regex(paste0("(^|[^0-9])", pc1, "([^0-9]|$)"))
+    # フォールバック: 非ゼロ埋め（直前がアンダースコア, 例: "_1"）
+    pat_loose <- stringr::regex(paste0("_", pc1, "([^0-9]|$)"))
     hit2 <- paths[stringr::str_detect(base, pat_loose)]
     if (length(hit2) > 0L) return(hit2[[1]])
 
@@ -60,6 +81,19 @@ library(here)
         return(list(path = gj_pick, type = "geojson"))
       }
     } else if (typ == "shp") {
+      # Prefer exact L02-yy_pp.shp match to avoid picking the YEAR (e.g., '-14_') by mistake
+      year_guess <- suppressWarnings(as.integer(fs::path_file(year_dir)))
+      if (!is.na(year_guess)) {
+        in_shp <- tryCatch(
+          find_l02_shp(year = year_guess, pref_code = pref_code, base_dir = fs::path_dir(year_dir)),
+          error = function(e) NULL
+        )
+        if (!is.null(in_shp) && fs::file_exists(in_shp)) {
+          .l02_msg(paste0("  - 入力検出：SHP（", fs::path_file(in_shp), "）"), verbose)
+          return(list(path = in_shp, type = "shp"))
+        }
+      }
+      # Fallback: scan recursively and pick by refined pattern
       shp <- unlist(lapply(search_dirs, function(d)
         fs::dir_ls(d, recurse = TRUE, type = "file", glob = "*.shp")
       ))
