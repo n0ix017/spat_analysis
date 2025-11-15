@@ -1,5 +1,8 @@
 #script/00_00_install_packages.R
-
+# CRANミラーを非対話でも固定（未設定/@CRAN@ の場合だけ上書き）
+if (is.null(getOption("repos")) || getOption("repos")[["CRAN"]] %in% c("@CRAN@", NULL)) {
+  options(repos = c(CRAN = "https://cloud.r-project.org"))
+}
 install.packages("cartogram")
 install.packages("estimatr")
 install.packages("fixest")

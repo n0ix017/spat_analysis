@@ -20,10 +20,13 @@ ADM_UNION_GJ <- file.path(OUT_DIR_GJ,  "adm_union_8pref.geojson")
 ADM_UNION_RDS <- file.path(OUT_DIR_RDS, "adm_union_8pref.rds")
 
 # L02（都道府県地価調査）年別GeoJSONの親ディレクトリ（関数の既定引数が参照）
+# --- L02（地価データ）標準化GeoJSONのルート ---
+# 環境変数 L02_STD_DIR があればそれを採用、無ければ既定の相対パスにする
+L02_STD_DIR <- Sys.getenv("L02_STD_DIR", unset = here::here("data_raw", "ksj_l02_landprice"))
+# 互換用の別名（どちらの名前で参照されても動くようにしておく）
 DATA_L02_GJ_ROOT <- L02_STD_DIR
 
 # --- 入出力の規約 ---
-L02_STD_DIR   <- here::here("data_fmt", "l02_std")  # 年ごとにgeojsonを格納している親
 PANEL_DIR     <- here::here("data_fmt", "panel")    # 集計済みパネルの格納先
 MATCH_DIR     <- here::here("data_fmt", "matched")  # マッチング結果の格納先
 FIG_DIR       <- here::here("output", "fig")        # 図の出力先
@@ -37,3 +40,9 @@ QA_HTML_DIR <- file.path(QA_ROOT_DIR, "html")
 # 初回はディレクトリ生成
 dir.create(QA_PNG_DIR,  recursive = TRUE, showWarnings = FALSE)
 dir.create(QA_HTML_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# 分析用の入力パネル（build_full_panel の成果物）
+PANEL_RDS     <- here::here("data_fmt","fmt_rds","panel_band_l02.rds")
+
+# モデル出力
+MODEL_OUT_DIR <- here::here("output","models")

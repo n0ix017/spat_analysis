@@ -1,4 +1,3 @@
-# code/fn_build_station_bands.R
 library(sf)
 library(dplyr)
 library(here)
@@ -27,6 +26,30 @@ build_station_bands <- function(stn_flag  = NULL,
 
   # 1) 入力の駅点を用意（NULLなら既定RDSから読み込み）
   if (is.null(stn_flag)) stn_flag <- readRDS(STATIONS_OUT_RDS)
+
+  # --- 互換性のための安全ネット（列の標準化） ---
+  # 駅名列を内部標準である station_jp にそろえる（無ければ作る）
+  if (!"station_jp" %in% names(stn_flag)) {
+    if ("station" %in% names(stn_flag)) {
+      stn_flag$station_jp <- stn_flag$station
+    } else if ("station_name" %in% names(stn_flag)) {
+      stn_flag$station_jp <- stn_flag$station_name
+    } else {
+      stn_flag$station_jp <- NA_character_
+    }
+  }
+  # 停車フラグが存在しない場合は補完（東海道は実質こだま=1）
+  if (!"nozomi" %in% names(stn_flag)) stn_flag$nozomi <- 0L
+  if (!"hikari" %in% names(stn_flag)) stn_flag$hikari <- 0L
+  if (!"kodama" %in% names(stn_flag)) stn_flag$kodama <- 1L
+  # サービス序数（のぞみ=2, ひかり=1, それ以外=0）を持っていなければ生成
+  if (!"service_tier" %in% names(stn_flag)) {
+    stn_flag$service_tier <- dplyr::case_when(
+      stn_flag$nozomi == 1L ~ 2L,
+      stn_flag$hikari == 1L ~ 1L,
+      TRUE ~ 0L
+    )
+  }
 
   # 2) バッファ計算のため、平面直交座標へ変換（メートル単位）
   stn_bufs <- stn_flag |>
@@ -59,7 +82,7 @@ build_station_bands <- function(stn_flag  = NULL,
   bands <- do.call(rbind, ring_list) |>
     dplyr::mutate(band_id = paste0("[", band_from_km, ",", band_to_km, ")")) |>
     dplyr::select(
-      station_jp = station, station_key, nozomi, hikari, kodama,
+      station_jp, station_key, nozomi, hikari, kodama,
       service_tier, band_from_km, band_to_km, band_id, geometry
     )
 

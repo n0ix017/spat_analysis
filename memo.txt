@@ -39,3 +39,32 @@ spat_analysis/
 ├─ rmd/
 │  └─ final_report.Rmd          # レポート本文（R Markdown）
 └─ spat_analysis.Rproj
+
+# 0) ルートへ
+cd /Users/hirokazuhara/spat_analysis
+
+# 1) （任意）QA出力の保存先を指定（図表を output/qa に書き出し）
+export SPAT_QA_ROOT="$(pwd)/output/qa"
+
+# 2) 依存パッケージ導入（初回だけ）
+Rscript code/00_install_packages.R
+
+# 3) 行政界ユニオンの作成（RDS/GEOJSONを作成）
+Rscript script/11_02_build_admin_union.R
+source("script/11_02_build_admin_union.R")
+# 4) 東海道新幹線の駅フラグ付きポイントを作成（RDS/GEOJSONを作成）
+Rscript script/11_01_build_stations.R
+source("script/11_01_build_stations.R")
+# 5) 駅×距離帯×L02の年次パネルを作成
+#   ※ 34_* の中で関数定義型なら source→関数呼び出し→RDS保存、の形で実行
+Rscript -e 'source("code/33_read_l02_year.R"); \
+            source("code/32_build_station_bands.R"); \
+            source("code/34_build_station_band_panel.R"); \
+            p <- build_station_band_panel(years = 2009:2025); \
+            saveRDS(p, file = here::here("data_fmt","fmt_rds","panel_band_l02.rds"))'
+
+#   （もし code/34_build_station_band_panel.R が単体でRDSを書き出す実装なら↓でもOK）
+# Rscript code/34_build_station_band_panel.R
+source("script/21_01_build_full_panel.R")
+# 6) ベースラインDID＋イベントスタディ（結果を output/models と QA に保存）
+Rscript script/31_01_run_baseline_did.R
