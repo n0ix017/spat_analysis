@@ -16,3 +16,13 @@ L02_STD_DIR   <- here::here("data_fmt", "l02_std")  # 年ごとにgeojsonを格�
 PANEL_DIR     <- here::here("data_fmt", "panel")    # 集計済みパネルの格納先
 MATCH_DIR     <- here::here("data_fmt", "matched")  # マッチング結果の格納先
 FIG_DIR       <- here::here("output", "fig")        # 図の出力先
+
+#qa用のpath
+OUTPUT_DIR    <- here::here("output")
+QA_ROOT_DIR <- Sys.getenv("SPAT_QA_ROOT", unset = file.path(OUTPUT_DIR, "qa"))
+QA_PNG_DIR  <- file.path(QA_ROOT_DIR, "png")
+QA_HTML_DIR <- file.path(QA_ROOT_DIR, "html")
+
+# 初回はディレクトリ生成
+dir.create(QA_PNG_DIR,  recursive = TRUE, showWarnings = FALSE)
+dir.create(QA_HTML_DIR, recursive = TRUE, showWarnings = FALSE)

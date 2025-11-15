@@ -5,14 +5,13 @@
 ├── .gitignore
 ├── TREE.txt
 ├── code
-│   ├── 00_install_packages.R
 │   ├── 01_config_paths.R
 │   ├── 02_config_params.R
 │   ├── 03_util_strings.R
-│   ├── 31_convert_randplace_geojson.R
-│   ├── 32_build_station_bands.R
-│   ├── 33_read_l02_year.R
-│   └── 34_build_station_band_panel.R
+│   ├── fn_build_station_band_panel.R
+│   ├── fn_build_station_bands.R
+│   ├── fn_convert_randplace_geojson.R
+│   └── fn_read_l02_year.R
 ├── data_fmt
 │   ├── fmt_gj
 │   └── fmt_rds
@@ -22,8 +21,9 @@
 ├── rmd
 │   └── final_report.Rmd
 ├── script
-│   ├── 12_build_stations.R
-│   └── 21_build_admin_union.R
+│   ├── 00_00_install_packages.R
+│   ├── 11_01_build_stations.R
+│   └── 11_02_build_admin_union.R
 └── spat_analysis.Rproj
 
 9 directories, 18 files

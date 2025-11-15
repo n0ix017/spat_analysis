@@ -9,6 +9,7 @@ library(here)
 source(here("code", "01_config_paths.R"))
 source(here("code", "02_config_params.R"))
 source(here("code", "03_util_strings.R"))
+source(here("code", "04_util_qa.R"))
 source(here("data_ref", "stops_shinkansen.R"))
 
 #行政界ユニオンを読み込み
@@ -65,3 +66,12 @@ dir.create(dirname(STATIONS_OUT_RDS), showWarnings = FALSE, recursive = TRUE)
 sf::st_write(stn_flag, STATIONS_OUT_GJ, delete_dsn = TRUE, quiet = TRUE)
 saveRDS(stn_flag, STATIONS_OUT_RDS)
 
+#qa処理
+if (qa_on()) {
+  p <- ggplot(stn_flag) +
+    geom_sf(aes(color = factor(service_tier)), size = 2) +
+    ggrepel::geom_text_repel(aes(label = station), size = 3, max.overlaps = 30) +
+    labs(title = "Tokaido Shinkansen stations by stop tier",
+         color = "tier (2:nozomi,1:hikari,0:kodama)")
+  qa_png(p, "12_stations_by_tier")
+}
