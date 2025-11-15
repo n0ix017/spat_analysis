@@ -1,4 +1,4 @@
-#00_install_packages.R
+#code/00_install_packages.R
 
 install.packages("cartogram")
 install.packages("estimatr")
@@ -26,3 +26,4 @@ install.packages("janitor")
 install.packages("purrr")
 install.packages("readr")
 install.packages("here")
+install.packages("languageserver")

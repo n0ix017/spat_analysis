@@ -1,4 +1,4 @@
-#32_build_station_bands.R
+#code/32_build_station_bands.R
 library(sf)
 library(dplyr)
 library(here)

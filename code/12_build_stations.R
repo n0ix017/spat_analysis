@@ -1,4 +1,4 @@
-#12_build_station.R
+#code/12_build_station.R
 
 #dir.create(dirname(OUT_GJ), showWarnings = FALSE, recursive = TRUE)
 library(sf)

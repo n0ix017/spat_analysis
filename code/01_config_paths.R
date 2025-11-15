@@ -1,4 +1,4 @@
-#01_config_paths.R
+#code/01_config_paths.R
 
 library(here)
 

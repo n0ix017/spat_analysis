@@ -1,4 +1,4 @@
-#11_ref_stops_shinkansen.R
+#data_ref/stops_shinkansen.R
 
 # ================================
 # 東海道新幹線 停車駅 定義（手入力・明示）

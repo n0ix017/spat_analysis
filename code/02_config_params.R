@@ -1,4 +1,4 @@
-#02_config_params.R
+#code/02_config_params.R
 
 #座標
 EPSG_WGS84 <- 4326
