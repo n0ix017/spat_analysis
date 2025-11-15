@@ -55,10 +55,6 @@ stn_flag <- stn_tokaido |>
   ) |>
   arrange(desc(nozomi), desc(hikari), station)
 
-#出力ファイル名を定義
-STATIONS_OUT_GJ <- file.path(OUT_DIR_GJ, "tokaido_stations_flags.geojson")
-STATIONS_OUT_RDS <- file.path(OUT_DIR_RDS, "tokaido_stations_flags.rds")
-
 # 出力
 dir.create(dirname(STATIONS_OUT_GJ), showWarnings = FALSE, recursive = TRUE)
 dir.create(dirname(STATIONS_OUT_RDS), showWarnings = FALSE, recursive = TRUE)

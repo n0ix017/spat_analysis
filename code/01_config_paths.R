@@ -11,6 +11,17 @@ STATION_GJ <- here::here("data_raw", "ksj_n02_railway","N02-24_Station.geojson")
 OUT_DIR_GJ  <- here::here("data_fmt", "fmt_gj")
 OUT_DIR_RDS <- here::here("data_fmt", "fmt_rds")
 
+# 東海道新幹線 停車フラグ付き駅
+STATIONS_OUT_GJ <- file.path(OUT_DIR_GJ,  "tokaido_stations_flags.geojson")
+STATIONS_OUT_RDS <- file.path(OUT_DIR_RDS, "tokaido_stations_flags.rds")
+
+# 行政界ユニオン（8県）
+ADM_UNION_GJ <- file.path(OUT_DIR_GJ,  "adm_union_8pref.geojson")
+ADM_UNION_RDS <- file.path(OUT_DIR_RDS, "adm_union_8pref.rds")
+
+# L02（都道府県地価調査）年別GeoJSONの親ディレクトリ（関数の既定引数が参照）
+DATA_L02_GJ_ROOT <- L02_STD_DIR
+
 # --- 入出力の規約 ---
 L02_STD_DIR   <- here::here("data_fmt", "l02_std")  # 年ごとにgeojsonを格納している親
 PANEL_DIR     <- here::here("data_fmt", "panel")    # 集計済みパネルの格納先

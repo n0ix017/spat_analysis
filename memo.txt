@@ -1,0 +1,41 @@
+現状の想定ディレクトリ設計
+spat_analysis/
+├─ code/                        # ここに設定・ユーティリティ・関数（fn_）を集約
+│  ├─ 00_install_packages.R     # 必要パッケージの一括導入
+│  ├─ 01_config_paths.R         # 入出力パス（here::here 由来の定数）
+│  ├─ 02_config_params.R        # 分析パラメータ（EPSG, 距離帯, 年の範囲 etc.）
+│  ├─ 03_util_strings.R         # 文字列正規化（norm_ja など）
+│  ├─ 04_util_qa.R              # QA出力（mapview保存先など）※導入済みならここ
+│  ├─ fn_build_station_bands.R  # 駅×距離帯のリングSFを作る関数（build_station_bands）
+│  ├─ fn_read_l02_year.R        # L02（地価）を「年」単位で安全に読む関数群
+│  ├─ fn_build_station_band_panel.R
+│  │     # パネル生成の中核関数群：
+│  │     #   list_l02_files(), read_l02_year()
+│  │     #   join_l02_to_bands(), summarise_bands(), build_panel_for_year()
+│  │     #   build_station_band_panel()
+│  └─ 31_convert_randplace_geojson.R   # （任意）検証用ランダム点の作成など
+│
+├─ scripts/                     # “実行用”スクリプト（番号で実行順を示す）
+│  ├─ 12_build_stations.R       # 東海道新幹線の停車駅SF（flag付）を作成
+│  ├─ 21_build_admin_union.R    # 8県の行政界ユニオンを作成
+│  ├─ 21_01_build_station_bands.R        # （任意）リング作成のバッチ実行
+│  ├─ 21_02_build_panel_for_year.R       # （任意）特定年のパネル生成
+│  └─ 21_03_build_full_panel.R           # 2009–2025の年ループで最終パネル生成
+│
+├─ data_ref/
+│  └─ stops_shinkansen.R        # のぞみ/ひかり/こだまの手入力リスト
+│
+├─ data_fmt/                    # “中間成果物”の保存先（書き出し先は config で定義）
+│  ├─ fmt_gj/                   # GeoJSON 出力（駅, リング, 結合結果など）
+│  └─ fmt_rds/                  # RDS 出力（sfや中間テーブルの軽量保存）
+│
+├─ data_raw/                    # 元データ（N02駅, N03行政界, L02地価…）※非公開/巨大
+│  └─ …（県別・年別のGeoJSONが入る想定）
+│
+├─ output/
+│  ├─ qa/                       # 可視化やスナップショット（mapview出力等）
+│  └─ tables/                   # 集計CSVや図表を格納（レポートで参照）
+│
+├─ rmd/
+│  └─ final_report.Rmd          # レポート本文（R Markdown）
+└─ spat_analysis.Rproj
