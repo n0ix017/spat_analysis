@@ -1,0 +1,29 @@
+.
+├── .DS_Store
+├── .Rhistory
+├── .gitattributes
+├── .gitignore
+├── TREE.txt
+├── code
+│   ├── 00_install_packages.R
+│   ├── 01_config_paths.R
+│   ├── 02_config_params.R
+│   ├── 03_util_strings.R
+│   ├── 31_convert_randplace_geojson.R
+│   ├── 32_build_station_bands.R
+│   ├── 33_read_l02_year.R
+│   └── 34_build_station_band_panel.R
+├── data_fmt
+│   ├── fmt_gj
+│   └── fmt_rds
+├── data_ref
+│   └── stops_shinkansen.R
+├── output
+├── rmd
+│   └── final_report.Rmd
+├── script
+│   ├── 12_build_stations.R
+│   └── 21_build_admin_union.R
+└── spat_analysis.Rproj
+
+9 directories, 18 files

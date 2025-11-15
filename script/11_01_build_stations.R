@@ -1,4 +1,4 @@
-#code/12_build_station.R
+#script/11_01_build_station.R
 
 #dir.create(dirname(OUT_GJ), showWarnings = FALSE, recursive = TRUE)
 library(sf)
@@ -9,7 +9,7 @@ library(here)
 source(here("code", "01_config_paths.R"))
 source(here("code", "02_config_params.R"))
 source(here("code", "03_util_strings.R"))
-source(here("code", "11_ref_stops_shinkansen.R"))
+source(here("data_ref", "stops_shinkansen.R"))
 
 #行政界ユニオンを読み込み
 adm_u <- readRDS(ADM_UNION_RDS)

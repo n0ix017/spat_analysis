@@ -1,4 +1,4 @@
-#code/00_install_packages.R
+#script/00_00_install_packages.R
 
 install.packages("cartogram")
 install.packages("estimatr")
