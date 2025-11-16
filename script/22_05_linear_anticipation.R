@@ -45,11 +45,39 @@ eff_main <- c(
   ddd_near_post_treated = coef_to_pct(getb(m_ddd, "near:post:treated"))
 )
 
-# Wald 検定（DDD = 0）
-wald_ddd  <- wald(m_ddd,  "near:post:treated = 0")
-wald_dddw <- wald(m_ddd_w,"near:post:treated = 0")
-p_ddd   <- tryCatch(pvalue(wald_ddd),  error = function(e) NA_real_)
-p_ddd_w <- tryCatch(pvalue(wald_dddw), error = function(e) NA_real_)
+# === 5’) DDD係数のp値を安全に取得（wald失敗時のフォールバック） ===
+get_p <- function(m, term){
+  # 1) wald をまず試す（変数名の順序の揺れに備えてバッククォートで囲む）
+  p_try <- suppressWarnings(try({
+    pvalue(wald(m, paste0("`", term, "` = 0")))
+  }, silent = TRUE))
+  if (is.numeric(p_try) && length(p_try) == 1 && !is.na(p_try)) return(p_try)
+
+  # 2) 係数表から安全に拾う（順序 permutation も許容）
+  ct <- suppressWarnings(try(fixest::coeftable(m), silent = TRUE))
+  if (!inherits(ct, "try-error") && !is.null(ct)) {
+    rn <- rownames(ct)
+
+    # near/post/treated の並びが入れ替わる場合があるので全 permutation を候補にする
+    cands <- c("near:post:treated","near:treated:post",
+               "post:near:treated","post:treated:near",
+               "treated:near:post","treated:post:near")
+
+    idx <- which(rn %in% cands)
+    if (length(idx) >= 1) {
+      # p値列名は環境により異なる可能性があるので、最後の列を p 値とみなすフォールバックを用意
+      pv_col <- if ("Pr(>|t|)" %in% colnames(ct)) "Pr(>|t|)" else tail(colnames(ct), 1)
+      pv <- suppressWarnings(as.numeric(ct[idx[1], pv_col]))
+      if (is.finite(pv)) return(pv)
+    }
+  }
+
+  # 3) それでもダメなら NA
+  NA_real_
+}
+
+p_ddd   <- get_p(m_ddd,   "near:post:treated")
+p_ddd_w <- get_p(m_ddd_w, "near:post:treated")
 
 # === 6) 出力保存 ===
 out_dir <- here::here("output","model")

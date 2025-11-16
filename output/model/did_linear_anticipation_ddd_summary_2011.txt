@@ -1,5 +1,5 @@
-post_year = 2014
-near (%)                = 86.3
-DDD near:post:treated (%) = -3.1
-Wald p (unweighted)      = NA
-Wald p (weighted)        = NA
+post_year = 2011
+near (%)                = 87.0
+DDD near:post:treated (%) = -1.5
+Wald p (unweighted)      = 0.8639
+Wald p (weighted)        = 0.8083
