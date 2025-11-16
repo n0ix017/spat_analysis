@@ -1,0 +1,45 @@
+# === 0) プロジェクト直下へ ===
+cd /Users/hirokazuhara/spat_analysis
+
+# === 1) 出力ディレクトリ作成 ===
+SNAPDIR="snapshot_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$SNAPDIR"
+
+# === 2) ディレクトリ構造（重い領域は除外） ===
+if command -v tree >/dev/null 2>&1; then
+  tree -a -I 'data_raw|output|.git|.Rproj.user|__pycache__|node_modules|*.pdf|*.png|*.jpg|*.jpeg|*.tif|*.gpkg|*.zip|*.7z|*.shp|*.dbf|*.prj|*.shx|*.cpg|*.Rhistory|*.RData|.DS_Store' > "$SNAPDIR/00_tree.txt"
+else
+  # tree未インストール時の代替
+  find . \( -path './.git' -o -path './.Rproj.user' -o -path './data_raw' -o -path './output' \) -prune -o -print \
+    | sed -e 's/^\.\///' > "$SNAPDIR/00_tree.txt"
+fi
+
+# === 3) ファイル在庫一覧（更新日時・サイズ付き、重い領域除外） ===
+find . \( -path './.git' -o -path './.Rproj.user' -o -path './data_raw' -o -path './output' \) -prune -o -type f -print0 \
+| xargs -0 stat -f '%Sm %z %N' -t '%Y-%m-%d %H:%M:%S' \
+| sort > "$SNAPDIR/01_inventory.txt"
+
+# === 4) Gitメタ情報（あれば） ===
+{ git rev-parse --show-toplevel 2>/dev/null; git status -sb 2>/dev/null; git remote -v 2>/dev/null; } > "$SNAPDIR/10_git_status.txt"
+git log -n 20 --oneline --decorate 2>/dev/null > "$SNAPDIR/11_git_log.txt"
+
+# === 5) Rセッション情報（パッケージ環境） ===
+Rscript -e 'writeLines(capture.output(sessionInfo()))' > "$SNAPDIR/20_R_session.txt" 2>/dev/null || true
+
+# === 6) コード＆設定ファイルの中身をMarkdownにまとめる（1MB未満のファイル） ===
+find . \
+  \( -path './.git' -o -path './.Rproj.user' -o -path './data_raw' -o -path './output' \) -prune -o \
+  -type f \( -iname '*.R' -o -iname '*.Rmd' -o -iname '*.qmd' -o -iname '*.py' -o -iname '*.sh' -o -iname '*.sql' \
+            -o -iname '*.md' -o -iname '*.yaml' -o -iname '*.yml' -o -iname '*.json' -o -iname '.gitignore' \
+            -o -iname 'DESCRIPTION' -o -iname '*.Renviron' -o -iname '*.Rprofile' \) \
+  -size -1024k -print0 \
+| xargs -0 -I{} sh -c 'echo "\n\n===== FILE: {} =====\n```" >> "'"$SNAPDIR/30_files_dump.md"'"; cat "{}" >> "'"$SNAPDIR/30_files_dump.md"'"; echo "\n```" >> "'"$SNAPDIR/30_files_dump.md"'"'
+
+# === 7) 参考：CSVは先頭だけ（重いのでhead 40行）===
+find . \( -path './data_raw' -o -path './output' -o -path './.git' -o -path './.Rproj.user' \) -prune -o \
+  -type f -iname '*.csv' -size -2M -print0 \
+| xargs -0 -I{} sh -c 'echo "\n===== HEAD: {} =====" >> "'"$SNAPDIR/31_csv_heads.txt"'"; head -n 40 "{}" >> "'"$SNAPDIR/31_csv_heads.txt"'"'
+
+# === 8) まとめて圧縮 ===
+tar -czf "$SNAPDIR.tgz" "$SNAPDIR"
+echo "Done: $SNAPDIR.tgz"

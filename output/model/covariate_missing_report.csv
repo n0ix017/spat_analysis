@@ -1,0 +1,5 @@
+variable,na_count,total_rows,na_rate
+na_cov_water_share,663,867,0.7647058823529411
+na_cov_gas_share,459,867,0.5294117647058824
+na_cov_site_m2_med,816,867,0.9411764705882353
+na_cov_yoy_mean,408,867,0.47058823529411764

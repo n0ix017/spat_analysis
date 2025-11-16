@@ -1,29 +1,847 @@
 ---
-title: "final_report"
+title: "リニア中央新幹線構想が東海道新幹線のぞみ非停車駅周辺の土地価格に与える影響"
 output: html_document
-date: "2025-11-05"
+date: "2025-11-16"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+# ---- Global options ----
+knitr::opts_chunk$set(
+  echo = TRUE,          # Show code by default (except this chunk)
+  message = FALSE,      # Suppress package messages
+  warning = FALSE,      # Suppress warnings in the output
+  fig.align = "center",
+  dpi = 200
+)
+# QC図や簡易サマリを出すかどうか（提出前に FALSE にすれば一括非表示）
+DO_QC <- TRUE
+
+# ---- Libraries----
+suppressPackageStartupMessages({
+  library(tidyverse)    # dplyr, tidyr, ggplot2, readr, purrr, tibble, stringr, forcats
+  library(data.table)   # fast grouping/reshaping (optional)
+  library(sf)           # spatial vectors
+  library(fixest)       # TWFE / DiD / event-study (feols, sunab)
+  library(broom)        # tidy model outputs
+  library(modelsummary) # tables
+  library(janitor)      # clean_names, tabyl
+  library(scales)       # labels for ggplot
+  library(stringr)
+})
+
+# ---- Paths----
+RMD_DIR   <- normalizePath(dirname(knitr::current_input(dir = TRUE)))
+DATA_DIR  <- file.path(RMD_DIR, "data_fmt")
+OUTPUT_DIR <- file.path(RMD_DIR, "output")
+if (!dir.exists(OUTPUT_DIR)) dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# Convenience helpers
+path_data <- function(...) file.path(DATA_DIR, ...)
+path_out  <- function(...) file.path(OUTPUT_DIR, ...)
+
+# ---- Constants used throughout ----
+INTERVENTION_YEAR <- 2014L
+BAND_LABELS <- c("[0,1)", "[1,3)", "[3,5)")
+
+# knitr の図の出力デバイス設定
+knitr::opts_chunk$set(
+  dev = "png",  # HTML 用なので png でOK
+  dev.args = list(family = "Hiragino Sans"),  # 日本語の入るフォント
+  dpi = 150
+)
+
+# ggplot のデフォルトフォントを日本語対応に
+theme_set(theme_bw(base_family = "Hiragino Sans"))
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## 1.はじめに
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+2025年10月29日、JR東海は当社が建設中のリニア中央新幹線に関し､[東京･品川―名古屋間の工事費が従来計画で見込んでいた約7兆円から約4兆円増えて11兆円になるとの見通し](https://jr-central.co.jp/news/release/_pdf/000044731.pdf)を発表した。
+そんなリニア中央新幹線は東京ー名古屋ー大阪間の最短所要時間を大幅に短縮するとされ、その経済効果については既存の研究が幾つか存在する。
+特にKanasugi&Ushijima(2018)は、2011年の建設決定を起点に公示地価パネルでヘドニック＋DID（傾向スコア併用）を用い、平均処置効果が概ねプラス（全体で約0.5%）になり、名古屋側では効果が相対的に大きい一方、人口減少地域では限定的であることを報告している。これは便益の割引現在価値が情報公開直後から価格に織り込まれる可能性を示唆している。
+ただし、 便益を地域に広く波及させるには都市内アクセスが重要である。飯島ほか(2019)は山梨県駅(仮称)のケースにおいて、リニア駅ー中心市街を結ぶBRT/LRT等の整備によって域内GRPや税収・労働人口・地価の増分が拡大し得ることを示しており、都市内の足回りの重要性を示唆している。  
+ここで重要なのは、この「足回り(都市内アクセス)」が効果の発現を左右するという性質は新駅の有無に限定されないと考えられる点である。リニア開業に共ない長距離需要の一部がリニアに移行することで、「ひかり/こだま」の増発余地が生じることがJR東海「ファクトシート2025」によって言及されている。このとき、都市内アクセスが一定水準にある都市ほど、非主要駅でも“実効的な利便性”の上振れが実需につながりやすく、その期待が地価に先行的に資本化されうると仮説が立てられる。
+そこで本レポートでは既存の東海道新幹線ののぞみ非停車駅を抱える都市に焦点を当て、「リニア計画の進展(2014年の実施計画許可・2023年の国交省発表)を情報ショックとみなし、従来”のぞみが停車しない駅”周辺において、利便性拡大の期待が住宅地価に先行的に資本化された痕跡は確認できるか」という問いを立てる。  
+Kanasugi&Ushijima(2018)が「時間距離短縮（新線の直接効果）」を対象に地価の先行資本化を示したのに対し、「既存の東海道新幹線におけるダイヤ再配分」という間接効果に着目し、のぞみ非停車駅を有する都市の地価に先行的上昇が資本化されたかを検証する。JR東海および自治体資料は、リニア全線開業時にひかり・こだま増発による非停車駅の利便性向上を見込むと明記しており、本仮説の制度的妥当性を裏付ける。既存の学術研究・レビューは新線の直接効果や全国マクロの影響を扱うものが中心である点で、本レポートには独自性があると考える。  
+なお、本レポートでは時間不足のため、基本のベースライン構築までに留まってしまった。
 
-```{r cars}
-summary(cars)
+
+## 2.分析手法
+### 2-1. 手法の要旨
+・対象：東海道新幹線ののぞみ非停車駅を単位として、その駅周辺の距離帯で住宅地価の変化を比較する。  
+    バンドは0-1, 1-3, 3-5(km)とする。
+・介入：本ベースラインでは、リニア中央新幹線の実施計画認可(2014年)を共通の介入タイミングとする。
+・直観：リニア開業見込みにより長距離旅客の一部がリニアへ移行 → 既存東海道の「ひかり・こだま」増発余地が生じ、非停車駅の実効利便性が相対的に上振れするという期待が、駅至近ほど（都市内アクセスが効くほど）地価に先行資本化されうる、という仮説。
+
+### 2-2. 推定式
+
+差分の差分（DiD）で推定する。目的変数は住宅地価の対数 \(\ln P_{ibt}\)。介入後ダミーは次式で定義する：
+
+$$
+\mathrm{Post}_t = \mathbf{1}[\,t \ge 2014\,].
+$$
+
+ベースライン（TWFE）の推定式は：
+
+$$
+\begin{aligned}
+\ln P_{ibt}
+&= \alpha_{ib} + \delta_t
++ \sum_{k \in \{[0,1),[1,3)\}} \beta_k\, \mathbf{1}[b=k] \cdot \mathrm{Post}_t
++ \mathbf{X}_{ibt}^{\top}\theta
++ \varepsilon_{ibt}.
+\end{aligned}
+$$
+
+- \(\alpha_{ib}\)：駅 \(i\) × 距離帯 \(b\) の固定効果、\(\delta_t\)：年固定効果。基準帯は \([3,5)\)。
+- \(\mathbf{X}_{ibt}\)：共変量（水道/ガス普及率、敷地面積中央値、前年比変化率の平均など）。
+- 主関心パラメータは \(\beta_k\)。
+
+参考として、事前動学の検証のためのイベント・スタディ仕様も併用する：
+
+$$
+\begin{aligned}
+\ln P_{ibt}
+&= \alpha_{ib} + \delta_t
++ \sum_{s\neq -1} \gamma_s\,
+\underbrace{\mathbf{1}[\,b\in\{[0,1),[1,3)\}\,]}_{\text{近接帯}}
+\cdot \mathbf{1}[\,t-2014=s\,]
++ \mathbf{X}_{ibt}^{\top}\theta
++ \varepsilon_{ibt}.
+\end{aligned}
+$$
+
+- 基準年は \(s=-1\)（2013年）。介入前の \(\gamma_s\)（\(s\le -2\)）が 0 に近いこと＝平行トレンドの妥当性確認。
+
+### 2-3. 主要仮定の整理
+・同一駅周辺で近接帯と外縁帯の潜在トレンドは介入がなければ同じ（平行トレンド）。  
+・線形化誤差は \(\varepsilon_{ibt}\) に吸収。固定効果で駅規模・恒常差、年差を制御。  
+・共変量 \(\mathbf{X}_{ibt} \)は観測されるインフラ差や構成の年次変動を補助的に調整。
+
+
+
+## 3.データセット
+### 3-1.データ出典(data_raw)
+#### ・地価データ：国土数値情報 都道府県地価調査データ(2009-2025)  
+    今回は2009-2017のデータを使用。shpからgeojsonへと変換し、属性から「林地」を除外（地価単位が異なるため）  
+    また、2009-2011はカラムのラベルがL02ではなくL01となっていたため、変換処理を行う
+
+#### ・行政界データ：国土数値情報 行政区域データ(2025)  
+    市区町村・都道府県の属性付与や集計の参照に使用。
+
+#### ・駅データ：国土数値情報 鉄道データ(2025)  
+    東海道新幹線停車駅の座標抽出に使用。
+
+
+
+### 3-2 データ処理(data_raw→data_fmt)
+
+#### Ⅰ.地価データ
+shp→geojsonへ変換し、林地を除外。使いそうな列をrename
+```{r l02_convert, message=FALSE}
+# ---- Self-contained L02(SHP)->GeoJSON + strict column standardization ----
+YEARS   <- 2009:2017
+RAW_DIR <- file.path(RMD_DIR, "data_raw", "ksj_l02_landprice")
+OUT_DIR <- path_data("l02_geojson")
+if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+yy2 <- function(y) sprintf("%02d", as.integer(y) %% 100L)
+
+# === 1) 探索 & 抽出ユーティリティ ==============================================
+find_shp_candidates <- function(year) {
+  root <- file.path(RAW_DIR, "shapefile", paste0("l02_", yy2(year)))
+  if (!dir.exists(root)) stop("年フォルダが見つかりません: ", root)
+  list.files(root, pattern="\\.shp$", recursive=TRUE, full.names=TRUE)
+}
+extract_pref_code <- function(path){
+  b <- basename(path)
+  m <- regexec("L0[12]-[0-9]{2}_([0-9]{2})", b)
+  mm <- regmatches(b, m)[[1]]
+  if (length(mm) >= 2) mm[2] else NA_character_
+}
+pick_shp_for_year <- function(year){
+  cand <- find_shp_candidates(year)
+  if (!length(cand)) stop("SHP が見つかりません: ", year)
+  yy <- yy2(year)
+  strict <- cand[grepl(paste0("L0[12]-", yy, "_[0-9]{2}\\.shp$"), basename(cand))]
+  if (!length(strict)) strict <- cand
+  strict_shape <- strict[grepl("/SHAPE/", strict)]
+  if (length(strict_shape)) strict_shape else strict
+}
+
+# === 2) renameの対応表 =========
+ALIASES <- list(
+  year              = c("L02_005","年度","L01_005"),
+  price_yen_m2      = c("L02_006","調査価格","L01_006"),
+  yoy_rate_pct      = c("L02_007","対前年変動率","L01_007"),
+  admin_code        = c("L02_020","行政区域コード","L01_020"),
+  city_name         = c("L02_021","L01_021"),
+  site_area_m2      = c("L02_024","地積","L01_024"),
+  use_big           = c("L02_025","L01_025"),
+  use_detail        = c("L02_026","L01_026"),
+  use_code          = c("L02_027","L01_027"),
+  bldg_structure    = c("L02_028","L01_028"),
+  water_flag        = c("L02_029","L01_029"),
+  gas_flag          = c("L02_030","L01_030"),
+  landuse_code      = c("L02_001","用途区分","L01_001"),
+  landuse_code_prev = c("L02_003","L01_003")
+)
+TYPES <- c(
+  year="integer", price_yen_m2="numeric", yoy_rate_pct="numeric",
+  admin_code="character", city_name="character", site_area_m2="numeric",
+  use_big="character", use_detail="character", use_code="character",
+  bldg_structure="character", water_flag="integer", gas_flag="integer",
+  landuse_code="character", landuse_code_prev="character"
+)
+NA_IF <- list(
+  price_yen_m2=c(0,""), site_area_m2=c(0,""),
+  yoy_rate_pct=c(""), admin_code=c(""), city_name=c(""),
+  use_big=c(""), use_detail=c(""), use_code=c(""),
+  bldg_structure=c(""), water_flag=c(""), gas_flag=c("")
+)
+
+# === 3) 正準化（alias -> canonical へ厳格にマッピング & 型/NA処理） ============
+coerce_type <- function(v, type){
+  if (type=="integer") return(suppressWarnings(as.integer(v)))
+  if (type=="numeric") return(suppressWarnings(as.numeric(v)))
+  as.character(v)
+}
+standardize_columns <- function(x){
+  nms <- names(x)
+  # まず L01_* → L02_* 名称へ機械置換（2009-2011 の互換のため）
+  if (any(grepl("^L01_", nms))) {
+    n2 <- sub("^L01_", "L02_", nms)
+    # 既存と衝突しない範囲で置換
+    collide <- n2 %in% nms
+    n2[collide] <- nms[collide]
+    names(x) <- n2
+    nms <- names(x)
+  }
+  # エイリアスから正準名を生成
+  for (canon in names(ALIASES)) {
+    if (canon %in% nms) next
+    ali <- ALIASES[[canon]]
+    hit <- ali[ali %in% nms]
+    if (length(hit)>=1) {
+      x[[canon]] <- x[[hit[1]]]
+    } else {
+      # 無ければ作る（NA 埋め）
+      x[[canon]] <- NA
+    }
+  }
+  # 型変換 & NA 置換
+  for (canon in names(TYPES)) {
+    x[[canon]] <- coerce_type(x[[canon]], TYPES[[canon]])
+    if (canon %in% names(NA_IF)) {
+      na_vals <- NA_IF[[canon]]
+      x[[canon]][x[[canon]] %in% na_vals] <- NA
+    }
+  }
+  x
+}
+
+# === 4) 林地の除外（landuse_code を厳格使用） ================================
+is_forest <- function(v){
+  vv <- as.character(v)
+  vv <- trimws(vv)
+  vv <- ifelse(nchar(vv)==1, sprintf("%02s", vv), vv)
+  vv %in% c("20","020","林","林地","林野")
+}
+
+# === 5) 1ファイル処理：読み→正準化→林地除外→EPSG:4326→書き出し ============
+convert_one_shp <- function(shp_path, out_dir, year){
+  message("Reading: ", shp_path)
+  x <- sf::st_read(shp_path, quiet=TRUE, options="ENCODING=CP932")
+  if (is.na(sf::st_crs(x))) x <- sf::st_set_crs(x, 4612)  # JGD2000 仮定
+  # 正準化（列名/型/NA）
+  x <- standardize_columns(x)
+
+  n0 <- nrow(x)
+  if ("landuse_code" %in% names(x)) {
+    keep <- !is_forest(x$landuse_code) | is.na(x$landuse_code)
+    x <- x[keep, , drop=FALSE]
+  }
+  n1 <- nrow(x)
+
+  # 最後に座標を WGS84 統一
+  x <- sf::st_transform(x, 4326)
+
+  pp <- extract_pref_code(shp_path)
+  out_file <- file.path(out_dir, sprintf("L02-%s_%s.geojson", yy2(year), ifelse(is.na(pp),"XX",pp)))
+  if (file.exists(out_file)) file.remove(out_file)
+  sf::st_write(x, out_file, driver="GeoJSON", quiet=TRUE)
+  tibble::tibble(
+    year = as.integer(year), pref_code = pp,
+    n_in = n0, n_out = n1, n_removed = n0 - n1,
+    input = shp_path, output = out_file
+  )
+}
+
+# === 6) 年ごとに一括変換（都道府県ごと1本に集約） =============================
+conv_log <- purrr::map_dfr(
+  YEARS,
+  function(y){
+    files <- pick_shp_for_year(y)
+    df <- tibble::tibble(path=files, pref=vapply(files, extract_pref_code, character(1)))
+    df <- dplyr::distinct(df, pref, .keep_all=TRUE)
+    purrr::map_dfr(df$path, ~convert_one_shp(.x, OUT_DIR, y))
+  }
+)
+
 ```
 
-## Including Plots
+```{r l02_convert_qc, message=FALSE}
+if (DO_QC) {
+  # 変換ログの確認
+  cat("=== QC: L02 convert log (head) ===\n")
+  print(utils::head(conv_log, 5))
 
-You can also embed plots, for example:
+  conv_year <- conv_log %>%
+    dplyr::group_by(year) %>%
+    dplyr::summarise(
+      n_pref  = dplyr::n_distinct(pref_code),
+      n_points= sum(n_out, na.rm = TRUE),
+      .groups = "drop"
+    )
+  cat("=== QC: Converted prefectures & points by year ===\n")
+  print(conv_year)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+  # 変換後ファイルのカラム/CRS/林地除外チェック（サンプル1件）
+  gj_files <- list.files(OUT_DIR, pattern="\\.geojson$", full.names = TRUE)
+  if (length(gj_files) > 0) {
+    g0 <- sf::st_read(gj_files[[1]], quiet = TRUE)
+    req <- c("year","price_yen_m2","yoy_rate_pct","admin_code","city_name",
+             "site_area_m2","use_big","use_detail","use_code","bldg_structure",
+             "water_flag","gas_flag","landuse_code")
+    cat("Required columns present: ", all(req %in% names(g0)), "\n")
+    cat("CRS EPSG: ", sf::st_crs(g0)$epsg, "\n")
+    if ("landuse_code" %in% names(g0)) {
+      forest_share <- mean(g0$landuse_code %in% c("20","020","林","林地","林野"), na.rm = TRUE)
+      cat("Forest share (should be ~0): ", round(forest_share, 4), "\n")
+    }
+  } else {
+    warning("No GeoJSON files found in OUT_DIR for QC.")
+  }
+}
 ```
+
+#### Ⅱ.行政界データ
+各県ごとに散らばっているので一括に統合
+```{r admin_union, message=FALSE}
+# ---- Admin (N03) ----------------
+ADM_DIR     <- file.path(RMD_DIR, "data_raw", "ksj_n03_adm")  # ここにN03のGeoJSONを配置
+ADM_OUT_DIR <- path_data("adm")
+if (!dir.exists(ADM_OUT_DIR)) dir.create(ADM_OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# 1) GeoJSONのみを前提に列挙
+adm_files <- list.files(ADM_DIR, pattern = "\\.geojson$", full.names = TRUE, recursive = TRUE)
+if (length(adm_files) == 0L) stop("行政界GeoJSONが見つかりません: ", ADM_DIR)
+
+# 2) 読み込み → CRS統一（EPSG:4326）→ Z/M次元を除去 → 型の揃え（MULTIPOLYGON）
+adm_list <- lapply(adm_files, function(f) {
+  g <- sf::st_read(f, quiet = TRUE)
+  if (is.na(sf::st_crs(g))) g <- sf::st_set_crs(g, 4612)   # JGD2000を仮定（無指定の場合）
+  g <- sf::st_transform(g, 4326)
+  g <- sf::st_zm(g, drop = TRUE, what = "ZM")
+  suppressWarnings(sf::st_cast(g, "MULTIPOLYGON"))
+})
+
+# 3) 単一ファイルで「既に全国がまとまっている」ケースにも対応（そのまま結合）
+adm <- do.call(rbind, adm_list)
+
+# 4) トポロジ整備（必要なら）
+if (any(!sf::st_is_valid(adm))) {
+  adm <- sf::st_make_valid(adm)
+}
+
+# 5) 全国外形（union）を作成（クリッピングや距離計算の基準用）
+adm_union <- sf::st_union(sf::st_geometry(adm))
+
+# 6) 出力（GeoJSON）
+ADM_ALL_GJ    <- path_data("adm", "admin_all.geojson")
+ADM_UNION_GJ  <- path_data("adm", "admin_union_outline.geojson")
+
+if (file.exists(ADM_ALL_GJ))   file.remove(ADM_ALL_GJ)
+if (file.exists(ADM_UNION_GJ)) file.remove(ADM_UNION_GJ)
+
+sf::st_write(adm,                       ADM_ALL_GJ,   driver = "GeoJSON", quiet = TRUE)
+sf::st_write(sf::st_as_sf(adm_union),   ADM_UNION_GJ, driver = "GeoJSON", quiet = TRUE)
+
+
+```
+```{r admin_union_qc, message=FALSE}
+if (DO_QC) {
+  cat("=== QC: Admin (N03) ===\n")
+  g_all <- sf::st_read(ADM_ALL_GJ, quiet = TRUE)
+  g_u   <- sf::st_read(ADM_UNION_GJ, quiet = TRUE)
+  cat("Admin features (rows): ", nrow(g_all), "\n")
+  cat("Admin CRS EPSG: ", sf::st_crs(g_all)$epsg, "\n")
+  cat("Union geometry type: ", paste(unique(sf::st_geometry_type(g_u)), collapse = ", "), "\n")
+  cat("Invalid geometries in admin (post-fix, expect 0): ",
+      sum(!sf::st_is_valid(g_all)), "\n")
+}
+```
+
+
+
+
+#### Ⅲ.鉄道データ
+新幹線の停車駅を抜き出し、停車する車種のflagを付与する。flag付与のためのデータは自作
+```{r ref_stations_flag, message=FALSE}
+#まずはflag付与のためのリストを作る
+LINE_NAME <- "東海道新幹線"
+
+ALL_TOKAIDO <- c(
+  "東京", "品川", "新横浜", "小田原", "熱海", "三島", "新富士", "静岡",
+  "掛川", "浜松", "豊橋", "三河安城", "名古屋", "岐阜羽島", "米原", "京都", "新大阪"
+)
+
+NOZOMI <- c("東京", "品川", "新横浜", "名古屋", "京都", "新大阪")
+
+HIKARI <- union(
+  NOZOMI, c("小田原", "熱海", "三島", "静岡", "浜松", "豊橋", "岐阜羽島", "米原")
+)
+
+KODAMA <- ALL_TOKAIDO
+
+```
+
+先程定義した新幹線の駅定義と行政界データをくっつける
+```{r build_stations, message=FALSE}
+# ---- Build Tokaido Shinkansen station sf with stop flags ----
+RAIL_DIR   <- file.path(RMD_DIR, "data_raw", "ksj_n02_railway")
+ST_OUT_DIR <- path_data("stations")
+if (!dir.exists(ST_OUT_DIR)) dir.create(ST_OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# 1) 駅の GeoJSON を列挙
+st_files <- list.files(RAIL_DIR, pattern = "\\.geojson$", recursive = TRUE, full.names = TRUE)
+if (length(st_files) == 0L) stop("駅のGeoJSONが見つかりません: ", RAIL_DIR)
+
+# 2) 読み込み → CRS統一(EPSG:4326) → Z/M削除 → POINT化
+st_list <- lapply(st_files, function(f) {
+  g <- sf::st_read(f, quiet = TRUE)
+  if (is.na(sf::st_crs(g))) g <- sf::st_set_crs(g, 4612)   # JGD2000 を仮定（無指定なら）
+  g <- sf::st_transform(g, 4326)
+  g <- sf::st_zm(g, drop = TRUE, what = "ZM")
+  suppressWarnings(sf::st_cast(g, "POINT"))
+})
+
+st_all <- do.call(rbind, st_list)
+
+# 3) 列標準化（N02-24 schema 優先：路線=N02_003, 事業者=N02_004, 駅名=N02_005）
+std_col <- function(x, alts) {
+  for (nm in alts) if (nm %in% names(x)) return(x[[nm]])
+  rep(NA_character_, nrow(x))
+}
+st_all$line_name    <- std_col(st_all, c("N02_003","N02_002","路線名","line"))
+st_all$station_name <- std_col(st_all, c("N02_005","N02_003","駅名","station","st_name"))
+st_all$company      <- std_col(st_all, c("N02_004","N02_001","事業者","company"))
+
+# 4) 東海道新幹線の駅だけを抽出
+keep <- !is.na(st_all$line_name) & grepl("東海道新幹線", st_all$line_name)
+st_tokaido <- st_all[keep, c("station_name","line_name","company","geometry")]
+
+# 5) 駅名で重複除去（各駅1レコード）
+st_tokaido <- st_tokaido %>%
+  dplyr::filter(!is.na(station_name)) %>%
+  dplyr::group_by(station_name) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+
+# 6) のぞみ/ひかり/こだま 停車フラグを付与（冒頭で定義した駅名リストを利用）
+st_tokaido <- st_tokaido %>%
+  dplyr::mutate(
+    nozomi_stop   = station_name %in% NOZOMI,
+    hikari_stop   = station_name %in% HIKARI,
+    kodama_stop   = station_name %in% KODAMA,
+    nozomi_nonstop = !nozomi_stop
+  )
+
+# 7) 想定駅の存在チェック（ALL_TOKAIDO に対して）
+missing <- setdiff(ALL_TOKAIDO, st_tokaido$station_name)
+if (length(missing)) {
+  warning("想定の駅が見つかりません: ", paste(missing, collapse = ", "))
+}
+
+# 8) 保存（提出物と同階層の data/ 配下）
+ST_GJ  <- path_data("stations", "tokaido_stations_flags.geojson")
+if (file.exists(ST_GJ)) file.remove(ST_GJ)
+sf::st_write(st_tokaido, ST_GJ, driver = "GeoJSON", quiet = TRUE)
+
+# 9) サマリー表示（順序は東海道の並びに合わせる）
+dplyr::select(st_tokaido, station_name, nozomi_stop, hikari_stop, kodama_stop) %>%
+  dplyr::arrange(match(station_name, ALL_TOKAIDO)) %>%
+  print(n = Inf)
+
+```
+```{r stations_qc, message=FALSE}
+if (DO_QC) {
+  cat("=== QC: Tokaido stations with flags ===\n")
+  st <- sf::st_read(ST_GJ, quiet = TRUE)
+  cat("Stations count: ", nrow(st), "\n")
+  cat("CRS EPSG: ", sf::st_crs(st)$epsg, "\n")
+  print(
+    dplyr::select(st, station_name, nozomi_stop, hikari_stop, kodama_stop) %>%
+      dplyr::arrange(match(station_name, ALL_TOKAIDO))
+  )
+  missing <- setdiff(ALL_TOKAIDO, st$station_name)
+  if (length(missing)) warning("Missing expected stations: ", paste(missing, collapse = ", "))
+}
+```
+
+
+#### Ⅳ. 距離帯作成
+駅からの距離を計算、0-1,1-3,3-5(km)で距離帯付与
+
+```{r attach_bands, message=FALSE}
+sf::sf_use_s2(TRUE)
+# 1) 東海道新幹線の「のぞみ非停車」駅を読み込み（前段で保存済み）
+ST_GJ  <- path_data("stations", "tokaido_stations_flags.geojson")
+st_ref <- sf::st_read(ST_GJ, quiet = TRUE) %>%
+  dplyr::filter(nozomi_nonstop)
+
+# 2) L02（地価）ポイントを読み込み（列の不一致で rbind が失敗しないよう、必ず同一の列集合にそろえる）
+L02_DIR   <- path_data("l02_geojson")
+l02_files <- list.files(L02_DIR, pattern = "\\.geojson$", full.names = TRUE)
+stopifnot(length(l02_files) > 0)
+
+# この並び・集合にそろえる（geometry は別枠で保持）
+REQ <- c("year","price_yen_m2","yoy_rate_pct","site_area_m2",
+         "water_flag","gas_flag","landuse_code")
+
+std_one <- function(f){
+  g <- sf::st_read(f, quiet = TRUE)
+  if (is.na(sf::st_crs(g))) g <- sf::st_set_crs(g, 4612)  # 念のため
+  g <- sf::st_transform(g, 4326)
+  g <- sf::st_zm(g, drop = TRUE, what = "ZM")
+
+  # 欠損している必須列は NA で作成
+  miss <- setdiff(REQ, names(g))
+  if (length(miss)) for (m in miss) g[[m]] <- NA
+
+  # 余計な列は捨て、列順を固定（geometry を最後に）
+  g <- dplyr::select(g, dplyr::all_of(REQ), geometry)
+
+  # 型の統一（"2014年" → 2014 などの頑健化を含む）
+  g <- dplyr::mutate(
+    g,
+    year          = as.integer(stringr::str_extract(as.character(year), "\\d{4}")),
+    price_yen_m2  = suppressWarnings(as.numeric(price_yen_m2)),
+    yoy_rate_pct  = suppressWarnings(as.numeric(yoy_rate_pct)),
+    site_area_m2  = suppressWarnings(as.numeric(site_area_m2)),
+    water_flag    = suppressWarnings(as.integer(water_flag)),
+    gas_flag      = suppressWarnings(as.integer(gas_flag)),
+    landuse_code  = as.character(landuse_code)
+  )
+  g
+}
+
+l02_list <- lapply(l02_files, std_one)
+
+# すべての要素で列名が一致していることを最終チェック
+stopifnot(length(unique(vapply(l02_list, function(x) paste(names(x), collapse = "|"), character(1)))) == 1)
+
+# 列集合をそろえた上で rbind
+l02_pts <- do.call(rbind, l02_list)
+
+# 3) 最近傍の「のぞみ非停車駅」までの距離（km）を計算
+dist_m     <- sf::st_distance(l02_pts, st_ref)               # units 行列
+dist_km    <- units::set_units(dist_m, "km")                 # km に変換
+dist_km_mt <- as.matrix(units::drop_units(dist_km))          # 数値行列へ
+nearest_ix <- max.col(-dist_km_mt)                           # 各点の最短駅インデックス
+nearest_d  <- dist_km_mt[cbind(seq_len(nrow(l02_pts)), nearest_ix)]
+
+# 4) 5km以内に限定し、距離帯を付与
+keep <- !is.na(nearest_d) & nearest_d < 5
+pts_banded <- l02_pts[keep, , drop = FALSE]
+pts_banded$station_name <- st_ref$station_name[nearest_ix[keep]]
+pts_banded$dist_km      <- nearest_d[keep]
+pts_banded$band_id <- cut(
+  pts_banded$dist_km,
+  breaks = c(0, 1, 3, 5),
+  labels = BAND_LABELS,
+  right  = FALSE,
+  include.lowest = TRUE
+)
+
+# 5) 保存（提出物と同階層の data/ 配下）
+PTS_RDS <- path_data("l02_points_with_bands.rds")
+saveRDS(pts_banded, PTS_RDS)
+
+PTS_GJ <- path_data("l02_points_with_bands.geojson")
+pts_for_map <- pts_banded |>
+  dplyr::select(year, station_name, band_id, dist_km,
+                price_yen_m2, yoy_rate_pct, site_area_m2,
+                water_flag, gas_flag, geometry)
+if (file.exists(PTS_GJ)) file.remove(PTS_GJ)
+sf::st_write(pts_for_map, PTS_GJ, driver = "GeoJSON", quiet = TRUE)
+```
+
+```{r bands_qc, message=FALSE}
+if (DO_QC) {
+  cat("=== QC: L02 points with bands ===\n")
+  x <- readRDS(PTS_RDS)
+  cat("Banded points: ", nrow(x), "\n")
+  cat("Geometry is POINT: ", tryCatch(sf::st_is(x[1,], "POINT"), error = function(e) NA), "\n")
+  cat("CRS EPSG: ", sf::st_crs(x)$epsg, "\n")
+  print(table(x$band_id, useNA = "ifany"))
+  cat("Year range:\n"); print(range(x$year, na.rm = TRUE))
+  cat("Distance summary (km):\n"); print(summary(x$dist_km))
+  cat("Year x Band (first 10 rows):\n")
+  print(utils::head(as.data.frame(table(year = x$year, band = x$band_id)), 10))
+
+  # 簡易可視化（年×帯の観測数）
+  p <- x %>%
+    sf::st_drop_geometry() %>%
+    dplyr::count(year, band_id) %>%
+    ggplot2::ggplot(ggplot2::aes(x = year, y = n, group = band_id)) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point() +
+    ggplot2::labs(title = "観測数（年×距離帯）", x = NULL, y = "n")
+  print(p)
+}
+```
+
+
+#### Ⅴ.パネルデータ化
+
+
+```{r make_panel, message=FALSE}
+stopifnot(exists("PTS_RDS"))
+pts <- readRDS(PTS_RDS)
+
+# 1) 目的変数（対数地価）と基本QC
+pts <- pts %>%
+  dplyr::mutate(
+    ln_price = log(price_yen_m2),
+    water_f  = as.integer(water_flag == 1L),
+    gas_f    = as.integer(gas_flag   == 1L)
+  ) %>%
+  dplyr::filter(is.finite(ln_price), !is.na(year), !is.na(band_id), !is.na(station_name))
+
+# 2) 駅×帯×年に集約（共変量は点ベースから集計）
+panel <- pts %>%
+  dplyr::group_by(station_name, band_id, year) %>%
+  dplyr::summarise(
+    y_mean            = mean(ln_price, na.rm = TRUE),
+    n_obs             = dplyr::n(),
+    cov_water_share   = mean(water_f, na.rm = TRUE),
+    cov_gas_share     = mean(gas_f,   na.rm = TRUE),
+    cov_site_m2_med   = stats::median(site_area_m2, na.rm = TRUE),
+    cov_yoy_mean      = mean(yoy_rate_pct, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # 欠損率の参考指標
+  dplyr::mutate(
+    na_cov_water_share = as.integer(is.na(cov_water_share)),
+    na_cov_gas_share   = as.integer(is.na(cov_gas_share)),
+    na_cov_site_m2_med = as.integer(is.na(cov_site_m2_med)),
+    na_cov_yoy_mean    = as.integer(is.na(cov_yoy_mean))
+  )
+
+# 3) パネルのQC
+#cat("Panel rows: ", nrow(panel), "\n")
+#print(dplyr::count(panel, band_id))
+#print(range(panel$year, na.rm = TRUE))
+
+# 4) 保存
+PANEL_RDS <- path_data("panel_band_l02_with_covars.rds")
+saveRDS(panel, PANEL_RDS)
+
+# 5) ざっくり表
+#panel %>%
+#  dplyr::arrange(station_name, year, band_id) %>%
+#  head(12) %>% print(n = 12)
+```
+
+```{r panel_qc, message=FALSE}
+if (DO_QC) {
+  cat("=== QC: Panel (station × band × year) ===\n")
+  cat("Panel rows: ", nrow(panel), "\n")
+  print(dplyr::count(panel, band_id))
+  cat("Year range:\n"); print(range(panel$year, na.rm = TRUE))
+
+  na_tbl <- tibble::tibble(
+    variable   = c("cov_water_share","cov_gas_share","cov_site_m2_med","cov_yoy_mean"),
+    na_count   = c(sum(is.na(panel$cov_water_share)),
+                   sum(is.na(panel$cov_gas_share)),
+                   sum(is.na(panel$cov_site_m2_med)),
+                   sum(is.na(panel$cov_yoy_mean))),
+    total_rows = nrow(panel)
+  ) %>% dplyr::mutate(na_rate = na_count / total_rows)
+
+  print(na_tbl)
+  # 保存（提出物と同階層の output/ に NA レポートを置く）
+  readr::write_csv(na_tbl, path_out("covariate_missing_report.csv"))
+}
+```
+
+
+
+
+### 3-3. 記述統計（data_fmt）
+整形済みパネル（駅×距離帯×年）の基本統計量と簡易可視化を示す。  
+データ構築のプロセスは再現可能なRスクリプトとして整理されており、最終的に駅*距離帯*年のパネル(N=264)が得られた。
+```{r descriptives, message=FALSE}
+stopifnot(exists("panel"))
+
+# 駅・年・帯のカバレッジ
+coverage_tbl <- panel %>%
+  dplyr::count(year, band_id) %>%
+  tidyr::pivot_wider(names_from = band_id, values_from = n, values_fill = 0) %>%
+  dplyr::arrange(year)
+
+# 主要指標のサマリ
+num_cols <- c("y_mean", "cov_water_share", "cov_gas_share", "cov_site_m2_med", "cov_yoy_mean")
+summary_tbl <- panel %>% dplyr::select(dplyr::all_of(num_cols)) %>% modelsummary::datasummary_skim(type = "numeric")
+
+# 出力
+print(coverage_tbl)
+summary_tbl
+
+# 年×帯の平均対数地価の推移（駅で平均）
+p_ts <- panel %>%
+  dplyr::group_by(year, band_id) %>%
+  dplyr::summarise(y = mean(y_mean, na.rm = TRUE), .groups = "drop") %>%
+  ggplot2::ggplot(ggplot2::aes(x = year, y = y, color = band_id, group = band_id)) +
+  ggplot2::geom_line() + ggplot2::geom_point() +
+  ggplot2::labs(title = "平均対数地価の推移（年×距離帯）", x = NULL, y = "mean ln(price)", color = "帯")
+print(p_ts)
+
+# 帯別の分布（バイオリン）
+p_violin <- panel %>%
+  ggplot2::ggplot(ggplot2::aes(x = band_id, y = y_mean)) +
+  ggplot2::geom_violin(trim = TRUE) +
+  ggplot2::geom_boxplot(width = 0.15) +
+  ggplot2::labs(title = "対数地価の分布（距離帯別）", x = "距離帯", y = "ln(price)")
+print(p_violin)
+
+# ファイル保存（提出物と同階層の output/ に図を保存）
+try(ggplot2::ggsave(filename = path_out("fig_ts_lnprice.png"), plot = p_ts, width = 7, height = 4, dpi = 200), silent = TRUE)
+try(ggplot2::ggsave(filename = path_out("fig_violin_lnprice.png"), plot = p_violin, width = 6, height = 4, dpi = 200), silent = TRUE)
+```
+
+### 3-4. 共変量の扱いについて
+本来は水道・ガス普及率や敷地面積などの共変量を投入すべきだが、本データではこれらの欠損が多かった。
+特にcov_water_shareは約50%, cov_site_m2_medは約88%が欠損していたため、今回は一旦共変量を扱わずに分析を回した。  
+これにより、結果は「リニア計画に紐づく期待効果」と「2014年以降に近接帯に偏って発生した他のショック」を区別できない点に留意が必要である。
+
+## 4. 事前検証（イベント・スタディ）
+2014年を介入年とし、近接帯（[0,1), [1,3)）を処置群、[3,5)を参照帯として、相対年効果を推定する。
+
+
+```{r event-study, message=FALSE}
+stopifnot(exists("panel"))
+
+# 1) イベントスタディ用の変数を追加
+panel_es <- panel %>%
+  dplyr::mutate(
+    post       = year >= INTERVENTION_YEAR,
+    unit_id    = interaction(station_name, band_id, drop = TRUE),
+    treat_band = band_id %in% c("[0,1)", "[1,3)"),
+    rel_year   = pmax(pmin(year - INTERVENTION_YEAR, 5L), -5L)  # -5〜5 で打ち切り
+  )
+
+# 2) 各相対年 s ごとに「近接帯かつ rel_year==s」のダミーを自前で作る
+#    基準は s = -1 (2013年) なので、そこだけ作らない
+for (s in -5:5) {
+  if (s == -1) next
+  vname <- paste0("es_", s)
+  panel_es[[vname]] <- as.integer(panel_es$treat_band & panel_es$rel_year == s)
+}
+
+# 3) 使うダミー変数のリスト（-5,-4,-3,-2,0,1,2,3,4,5）
+es_vars <- paste0("es_", c(-5:-2, 0:5))
+
+# 4) 式を文字列から組み立てて TWFE 推定
+#    -> 変数名を `...` で囲んで、「演算」ではなく「名前」として扱わせる
+rhs_terms <- paste(sprintf("`%s`", es_vars), collapse = " + ")
+
+fml_es <- as.formula(
+  paste("y_mean ~", rhs_terms, "| unit_id + year")
+)
+
+es_mod <- fixest::feols(
+  fml_es,
+  data    = panel_es,
+  cluster = ~ station_name
+)
+# 5) 係数を tidy 化してイベントスタディ用データフレームに整形
+es_tidy <- broom::tidy(es_mod) %>%
+  dplyr::filter(term %in% es_vars) %>%
+  dplyr::mutate(
+    rel  = as.integer(sub("es_", "", term)),            # "es_-3" → -3
+    ci_l = estimate - 1.96 * std.error,
+    ci_u = estimate + 1.96 * std.error
+  ) %>%
+  dplyr::arrange(rel)
+
+# 6) ggplot でイベントスタディの図を描画
+p_es <- ggplot2::ggplot(es_tidy, ggplot2::aes(x = rel, y = estimate)) +
+  ggplot2::geom_hline(yintercept = 0, linetype = "dashed") +
+  ggplot2::geom_point() +
+  ggplot2::geom_errorbar(ggplot2::aes(ymin = ci_l, ymax = ci_u), width = 0.15) +
+  ggplot2::labs(
+    title = "イベント・スタディ（基準=2013年, 近接帯×相対年）",
+    x = "相対年 (年 - 2014)",
+    y = "効果（対数ポイント）"
+  )
+
+print(p_es)
+
+# 図をファイル保存（任意）
+try(
+  ggplot2::ggsave(
+    filename = path_out("fig_event_study.png"),
+    plot     = p_es,
+    width    = 7,
+    height   = 4,
+    dpi      = 200
+  ),
+  silent = TRUE
+)
+```
+
+## 5. ベースライン推定（DiD, TWFE）
+参照帯を[3,5)とし、Post×帯の相互作用で効果を推定する（単位固定効果=駅*帯、年固定効果）。
+
+```{r baseline-did, message=FALSE}
+stopifnot(exists("panel"))
+
+panel <- panel %>% dplyr::mutate(
+  post    = year >= INTERVENTION_YEAR,
+  unit_id = interaction(station_name, band_id, drop = TRUE)
+)
+
+# 共変量なしのシンプルな TWFE-DiD
+mod_did <- fixest::feols(
+  y_mean ~ fixest::i(band_id, post, ref = "[3,5)") |
+    unit_id + year,
+  data    = panel,
+  cluster = ~ station_name
+)
+
+# 表を出力
+modelsummary::modelsummary(
+  list("TWFE (DiD)" = mod_did),
+  fmt = 3,
+  output = "markdown",
+  gof_map = c("nobs", "r.squared", "within.r.squared")
+)
+
+# 係数の取り出し（提出用にCSV保存）
+coefs <- broom::tidy(mod_did)
+readr::write_csv(coefs, path_out("did_coefficients.csv"))
+```
+
+
+
+
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r session-info, echo=FALSE}
+# Minimal reproducibility info
+sessionInfo()
+```
+

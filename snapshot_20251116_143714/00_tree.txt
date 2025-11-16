@@ -1,0 +1,64 @@
+.
+├── .gitattributes
+├── .gitignore
+├── TREE.txt
+├── TREE_data_raw_full_20251116_0322.txt
+├── code
+│   ├── 01_config_paths.R
+│   ├── 02_config_params.R
+│   ├── 03_util_strings.R
+│   ├── 04_util_qa.R
+│   ├── 05_treatment_definitions.R
+│   ├── 05_util_geo.R
+│   ├── 06_models.R
+│   ├── 07_config_column.yml
+│   ├── 08_standardize_columns.R
+│   ├── fn_build_admin_union.R
+│   ├── fn_build_station_band_panel.R
+│   ├── fn_build_station_bands.R
+│   ├── fn_convert_randplace_geojson.R
+│   └── fn_read_l02_year.R
+├── data_fmt
+│   ├── fmt_gj
+│   │   ├── adm_union_8pref.geojson
+│   │   ├── tokaido_stations_buffer_1km.geojson
+│   │   └── tokaido_stations_flags.geojson
+│   └── fmt_rds
+│       ├── adm_union_8pref.rds
+│       ├── band_stats.rds
+│       ├── l02_points_with_bands.rds
+│       ├── model_data_bands_long.rds
+│       ├── panel_band_l02.rds
+│       ├── panel_band_l02_enriched.rds
+│       ├── panel_band_l02_with_covars.rds
+│       ├── panel_station_year.rds
+│       ├── station_bands.rds
+│       ├── station_year_grad_log.rds
+│       ├── station_year_price_stats.rds
+│       ├── tokaido_stations_buffer_1km.rds
+│       └── tokaido_stations_flags.rds
+├── data_ref
+│   └── stops_shinkansen.R
+├── memo.txt
+├── rmd
+│   └── final_report.Rmd
+├── script
+│   ├── 00_00_install_packages.R
+│   ├── 00_bootstrap.R
+│   ├── 11_01_build_stations.R
+│   ├── 11_02_build_admin_union.R
+│   ├── 21_01_build_full_panel.R
+│   ├── 22_01_make_points_with_bands.R
+│   ├── 22_01b_build_convariates.R
+│   ├── 22_02_qc_and_features.R
+│   ├── 22_03_build_model_data.R
+│   ├── 22_04_sensitivity.R
+│   ├── 22_05_linear_anticipation.R
+│   └── 31_01_run_baseline_did.R
+├── snapshot_20251116_143714
+│   └── 00_tree.txt
+├── spat_analysis.Rproj
+├── summarytxt.R
+└── tekito.R
+
+9 directories, 53 files

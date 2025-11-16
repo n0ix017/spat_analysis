@@ -1,5 +1,3 @@
-
-
 # 22_01b_build_convariates.R
 # 共変量（≤ L02_031 の情報に限定）をポイント→駅×距離帯へ集計し、
 # panel_band_l02_enriched.rds に左結合して保存します。
@@ -18,7 +16,14 @@ suppressPackageStartupMessages({
 logf <- function(...) cat(sprintf(...), "\n")
 
 # --- 入力ファイルの場所 ------------------------------------------------------
+# --- 入力ファイルの場所 ------------------------------------------------------
 PANEL_FILE <- here::here("data_fmt","fmt_rds","panel_band_l02_enriched.rds")
+# （必要に応じて）パネルファイルの上書き方法：
+# options(l02.panel_file = "/path/to/panel.rds") または 環境変数 L02_PANEL_FILE を設定
+panel_override <- getOption("l02.panel_file", Sys.getenv("L02_PANEL_FILE", NA))
+if (!is.na(panel_override) && fs::file_exists(panel_override)) {
+  PANEL_FILE <- panel_override
+}
 # バンド割当済みのポイントデータ（候補名を順に探索）
 POINTS_CANDIDATES <- c(
   here::here("data_fmt","fmt_rds","l02_points_with_bands.rds"),
@@ -27,9 +32,8 @@ POINTS_CANDIDATES <- c(
 )
 # 列名エイリアス定義のYML（複数の候補から探索）
 YML_CANDIDATES <- c(
-  here::here("code","config","07_config_column.yml"),
-  here::here("config","07_config_column.yml"),
   here::here("code","07_config_column.yml"),
+  here::here("config","07_config_column.yml"),
   here::here("07_config_column.yml")
 )
 
@@ -71,6 +75,7 @@ if (is.na(points_file)) {
 
 # --- YML（あれば）を読み、エイリアス→canonical の写像を作成 --------------
 yml_path <- YML_CANDIDATES[fs::file_exists(YML_CANDIDATES)][1]
+if (!is.na(yml_path)) logf("Using column YML: %s", yml_path)
 alias_map <- NULL
 if (!is.na(yml_path)) {
   cfg <- yaml::read_yaml(yml_path)
@@ -99,6 +104,20 @@ panel  <- readRDS(PANEL_FILE)
 points <- readRDS(points_file)
 points <- standardize_cols(points, alias_map)
 
+# -- 型揃え（YMLの type に沿った最低限のキャスト） -------------------------
+to_num <- function(x) suppressWarnings(as.numeric(x))
+to_int <- function(x) suppressWarnings(as.integer(x))
+points <- points |>
+  mutate(
+    year          = to_int(year),
+    price_yen_m2  = to_num(price_yen_m2),
+    yoy_rate_pct  = to_num(yoy_rate_pct),
+    site_area_m2  = to_num(site_area_m2),
+    water_flag    = to_int(water_flag),
+    gas_flag      = to_int(gas_flag),
+    landuse_code  = as.character(landuse_code)
+  )
+
 # 必要列（canonical 名）を確認
 required_cols <- c(
   "year","station_key","band_id",
@@ -114,7 +133,8 @@ logf("panel rows=%d, cols=%d", nrow(panel), ncol(panel))
 logf("points rows=%d, cols=%d [%s]", nrow(points), ncol(points), basename(points_file))
 
 # --- 林地(用途コード"020")は除外（単位が異なるため） -------------------------
-points <- points |> filter(!(landuse_code %in% c("020","20")))
+# "020" / "20" に加えて、文字列で "林地" と記される可能性にも備える
+points <- points |> filter(!(landuse_code %in% c("020","20","林地")))
 
 # --- 共変量作成（駅×年×距離帯） --------------------------------------------
 covars <- points |> 
@@ -129,6 +149,17 @@ covars <- points |>
   )
 
 logf("covars groups=%d", nrow(covars))
+
+# 簡易ログ：作成された共変量の欠損状況（結合前の段階）
+tmp_na_rate <- covars |>
+  summarise(
+    na_water = mean(is.na(cov_water_share)),
+    na_gas   = mean(is.na(cov_gas_share)),
+    na_site  = mean(is.na(cov_site_m2_med)),
+    na_yoy   = mean(is.na(cov_yoy_mean))
+  )
+logf("NA rate (covars): water=%.3f gas=%.3f site=%.3f yoy=%.3f",
+     tmp_na_rate$na_water, tmp_na_rate$na_gas, tmp_na_rate$na_site, tmp_na_rate$na_yoy)
 
 # --- 結合（左結合で panel の行数を保持） -----------------------------------
 out <- panel |> left_join(covars, by = c("year","station_key","band_id"))

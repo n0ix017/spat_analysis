@@ -70,9 +70,16 @@
   na_if: [""]
   transform: identity
 
-# （必要なら林地除外に使う用途区分）
+# 置き換え：07_config_column.yml
 - canonical: landuse_code
-  aliases: ["L02_001", "L02_003", "用途区分", "YOUTO_KBN", "youto_kbn"]
+  aliases: ["L02_001", "用途区分", "YOUTO_KBN", "youto_kbn"]
+  type: character
+  na_if: []
+  transform: identity
+
+# （必要なら保持）前年の用途区分を別カラムに
+- canonical: landuse_code_prev
+  aliases: ["L02_003"]
   type: character
   na_if: []
   transform: identity
