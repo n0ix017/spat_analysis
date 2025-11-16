@@ -6,6 +6,7 @@ library(here)
 
 source(here("code","01_config_paths.R"))      # L02_DIR_FMT などのPATH
 source(here("code","02_config_params.R"))     # EPSG_WGS84, TARGET_PREFS など
+source(here::here("code","08_standardize_columns.R"))
 
 # どちらか存在する用途区分列名を返すヘルパー
 .pick_use_col <- function(nm) {
@@ -60,5 +61,7 @@ read_l02_year <- function(year,
     mutate(log_price = log(price_yen_m2)) |>
     select(any_of(keep_cols))
   
+  #標準化
+  out <- standardize_l02_columns(out)
   return(out)
 }

@@ -1,0 +1,78 @@
+- canonical: year
+  aliases: ["L02_005", "年度"]
+  type: integer
+  na_if: []
+  transform: identity
+
+- canonical: price_yen_m2
+  aliases: ["L02_006", "調査価格"]
+  type: numeric
+  na_if: [0, ""]
+  transform: identity
+
+- canonical: yoy_rate_pct
+  aliases: ["L02_007", "対前年変動率"]
+  type: numeric
+  na_if: [""]
+  transform: identity
+
+- canonical: admin_code
+  aliases: ["L02_020", "行政区域コード"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: city_name
+  aliases: ["L02_021"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: site_area_m2
+  aliases: ["L02_024", "地積"]
+  type: numeric
+  na_if: [0, ""]
+  transform: identity
+
+- canonical: use_big
+  aliases: ["L02_025"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: use_detail
+  aliases: ["L02_026"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: use_code
+  aliases: ["L02_027"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: bldg_structure
+  aliases: ["L02_028"]
+  type: character
+  na_if: [""]
+  transform: identity
+
+- canonical: water_flag
+  aliases: ["L02_029"]
+  type: integer
+  na_if: [""]
+  transform: identity
+
+- canonical: gas_flag
+  aliases: ["L02_030"]
+  type: integer
+  na_if: [""]
+  transform: identity
+
+# （必要なら林地除外に使う用途区分）
+- canonical: landuse_code
+  aliases: ["L02_001", "L02_003", "用途区分", "YOUTO_KBN", "youto_kbn"]
+  type: character
+  na_if: []
+  transform: identity
